@@ -54,8 +54,8 @@ real(dp), parameter :: ug = 10.0d0, vg = 0.0d0  ! [m s-1], geostrophic wind
 ! Latitude and longitude of Hyytiala
 !real(dp), parameter :: latitude_deg  = 61.8455d0  ! [degN]
 !real(dp), parameter :: longitude_deg = 24.2833d0  ! [degE]
-real(dp), parameter :: latitude_deg  = 56.1d0  ! [degN]
-real(dp), parameter :: longitude_deg = 13.42d0  ! [degE]
+real(dp), parameter :: latitude_deg  = 56.1d0  ! [degN]  ! Pontus Task
+real(dp), parameter :: longitude_deg = 13.42d0  ! [degE]  ! Pontus Task
 
 real(dp), parameter :: latitude      = latitude_deg  * PI/180.0d0  ! [rad]
 real(dp), parameter :: longitude     = longitude_deg * PI/180.0d0  ! [rad]
@@ -160,6 +160,7 @@ real(dp),dimension(neq)    :: Conc
 real(dp)  :: exp_coszen             ! the radiation related quantities 
 real(dp), dimension(nr_bins,nz) :: particle_conc_1d, particle_conc_1d_new
 real(dp), dimension(nz) :: PM_1d, PN_1d, PV_1d
+real(dp), dimension(nr_bins) :: PN_2nd_layer
 real(dp), dimension(nr_cond,nz) :: cond_sink_1d = 0.001
 !-----------------------------------------------------------------------------------------
 ! Initialization
@@ -310,14 +311,14 @@ do while (time <= time_end)
         O2(layer) = 0.21 * Mair(layer)
         N2(layer) = 0.78 * Mair(layer)
         !Cons(1,layer)  = 24.0d0   * Mair(layer) * ppb     ! O3 concentration
-        Cons(1,layer)  = 40.0d0   * Mair(layer) * ppb     ! O3 concentration for task
+        Cons(1,layer)  = 40.0d0   * Mair(layer) * ppb     ! O3 concentration for Pontus task
         Cons(5,layer)  = 0.2d0    * Mair(layer) * ppb     ! NO2
         Cons(6,layer)  = 0.07d0   * Mair(layer) * ppb     ! NO
         !Cons(9,layer)  = 100.0d0  * Mair(layer) * ppb     ! CO
-        Cons(9,layer)  = 200.0d0  * Mair(layer) * ppb     ! CO for task
+        Cons(9,layer)  = 200.0d0  * Mair(layer) * ppb     ! CO for Pontus task
         Cons(11,layer) = 1759.0d0 * Mair(layer) * ppb     ! CH4
         !Cons(20,layer) = 0.5d0    * Mair(layer) * ppb     ! SO2
-        Cons(20,layer) = 2.0d0    * Mair(layer) * ppb     ! SO2 for task
+        Cons(20,layer) = 2.0d0    * Mair(layer) * ppb     ! SO2 for Pontus task
         !Cons(13,layer) = 2.2d0    * Mair(layer) * ppb     ! C5H8   ini  = 0
         !Cons(23,layer) = 2.2d0    * Mair(layer) * ppb     ! alpha-p ini=0
       
@@ -347,7 +348,7 @@ do while (time <= time_end)
 
     ! Concentrations can not be lower than 0
     do i=1,neq
-      do j=i,nz
+      do j=1,nz
         if(cons(i,j)<0.0d0) then
           cons(i,j) = 0.0d0
         endif
@@ -393,7 +394,7 @@ do while (time <= time_end)
     particle_conc_1d(1:neq,1) = particle_conc_1d(1:neq,2)
     ! Concentrations can not be lower than 0 [molec m-3]
     do i=1,nr_bins
-      do j=i,nz
+      do j=1,nz
         if(particle_conc_1d(i,j)<0.0d0) then
           particle_conc_1d = 0.0d0
         endif
@@ -411,7 +412,7 @@ do while (time <= time_end)
 
     ! Set the constraints above again for output
      do i=1,nr_bins
-      do j=i,nz
+      do j=1,nz
         if(particle_conc_1d(i,j)<0.0d0) then
           particle_conc_1d = 0.0d0
         endif
@@ -491,6 +492,9 @@ subroutine open_files()
   open(24,file=trim(adjustl(output_dir))//'/PM_1d',status='replace',action='write')
   open(25,file=trim(adjustl(output_dir))//'/PN_1d',status='replace',action='write')
   open(26,file=trim(adjustl(output_dir))//'/PV_1d',status='replace',action='write')
+  open(27,file=trim(adjustl(output_dir))//'/particle_volume',status='replace',action='write')
+  open(28,file=trim(adjustl(output_dir))//'/particle_mass',status='replace',action='write')
+  open(29,file=trim(adjustl(output_dir))//'/PN_2nd_layer',status='replace',action='write')
 
   open(50,file=trim(adjustl(output_dir))//'/diameter',status='replace',action='write')
 end subroutine open_files
@@ -503,13 +507,14 @@ end subroutine open_files
 !-----------------------------------------------------------------------------------------
 subroutine write_files(time)
   real(dp) :: time  ! current time
-  character(255) :: outfmt_one_scalar, outfmt_two_scalar, outfmt_level, outfmt_mid_level
+  character(255) :: outfmt_one_scalar, outfmt_two_scalar, outfmt_level, outfmt_mid_level, outfmt_bins
 
   ! Output real data with scientific notation with 16 decimal digits
   outfmt_one_scalar = '(es25.16e3)'                               ! for scalar
   write(outfmt_level     , '(a, i3, a)') '(', nz  , 'es25.16e3)'  ! for original levels
   write(outfmt_mid_level , '(a, i3, a)') '(', nz-1, 'es25.16e3)'  ! for middle levels
   write(outfmt_two_scalar, '(a, i3, a)') '(', 2   , 'es25.16e3)'  ! for two scalars
+  write(outfmt_bins, '(a, i3, a)') '(', nr_bins   , 'es25.16e3)'  ! for size bins 
 
   ! Only output hh once
   if (time == time_start) then
@@ -536,7 +541,10 @@ subroutine write_files(time)
   write(24, outfmt_level     ) PM_1d
   write(25, outfmt_level     ) PN_1d
   write(26, outfmt_level     ) PV_1d
-  
+  write(27, outfmt_level     ) particle_volume
+  write(28, outfmt_level     ) particle_mass
+  write(29, outfmt_bins      ) PN_2nd_layer
+
   
 
   
@@ -568,6 +576,9 @@ subroutine close_files()
   close(24)
   close(25)
   close(26)
+  close(27)
+  close(28)
+  close(29)
 
   close(50)
 
@@ -595,17 +606,17 @@ subroutine time_init()
 
   ! Day number
   !daynumber_start = 31+28+31+30+31+30+31+10  ! day is Aug. 10
-  daynumber_start = 31+28+31+6 ! day is Aug. 10
+  daynumber_start = 31+28+31+6 ! day is Aug. 10 Pontus Task
   daynumber       = daynumber_start
 
   ! Start time for each process
   !time_start_emission   = 3*24*one_hour
-  time_start_emission   = 4.625D0*24*one_hour
+  time_start_emission   = 4.625D0*24*one_hour  !Pontus Task
 
   time_start_chemistry  = 3*24*one_hour
   time_start_deposition = 3*24*one_hour
   !time_start_aerosol    = 3*24*one_hour
-  time_start_aerosol    = 4.0D0*24*one_hour
+  time_start_aerosol    = 4.0D0*24*one_hour ! Pontus Task
 
 
   ! Loop number
@@ -630,8 +641,8 @@ subroutine meteorology_init()
   ! Potential temperature
   !theta     = 273.15d0 + 25.0d0
   !theta(nz) = 273.15d0 + 30.0d0
-  theta     = 273.15d0 + 0.0d0
-  theta(nz) = 273.15d0 + 5.0d0
+  theta     = 273.15d0 + 0.0d0  ! Pontus Task
+  theta(nz) = 273.15d0 + 5.0d0   ! Pontus Task
 
   ! Air temperature and pressure
   temp = theta - (grav/Cp)*hh 
@@ -674,7 +685,7 @@ subroutine surface_values(temperature, time)
   ! With this trick, we don't need to open the file in the main program
   IF (first_time) THEN
      !open(30, file=trim(adjustl(input_dir))//'/hyytiala_2011_8_10_t_h2o.dat', status='old')
-     open(30, file=trim(adjustl(input_dir))//'/hyltemossa_2018_4_06_t_h2o.dat', status='old')
+     open(30, file=trim(adjustl(input_dir))//'/hyltemossa_2018_4_06_t_h2o.dat', status='old')  ! Pontus Task
      read(30, *) surface_data
      temperature_data(1:50) = surface_data(7,1:50) ! in Celcius
      first_time = .false.
