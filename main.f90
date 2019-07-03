@@ -425,7 +425,7 @@ do while (time <= time_end)
        PV_1d(i) = sum(particle_conc_1d(:,i)*particle_volume) * 1.D12
      enddo
   end if
-
+  PN_2nd_layer = particle_conc_1d(:,2) * 1.D-6
   !---------------------------------------------------------------------------------------
   ! Ending loop actions
   !---------------------------------------------------------------------------------------
